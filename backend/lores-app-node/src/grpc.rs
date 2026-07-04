@@ -1,33 +1,36 @@
+use std::pin::Pin;
+
 use lores_p2panda_client::PandaClient;
 
-use crate::backend::{NodeBackend, PublishError};
+use crate::transport::{Transport, TransportError};
 
-/// [`NodeBackend`] that forwards operations directly to a lores-node instance
-/// via gRPC using [`PandaClient`].
-pub struct GrpcBackend {
+/// [`Transport`] implementation that forwards operations to a lores-node
+/// instance via gRPC using [`PandaClient`].
+pub(crate) struct GrpcTransport {
     client: PandaClient,
 }
 
-impl GrpcBackend {
-    /// Create a backend with a lazy gRPC connection — no network call is made
-    /// until the first publish.
-    pub fn connect_lazy(grpc_addr: String) -> Result<Self, tonic::transport::Error> {
+impl GrpcTransport {
+    pub(crate) fn connect_lazy(grpc_addr: String) -> Result<Self, tonic::transport::Error> {
         let client = PandaClient::connect_lazy(grpc_addr)?;
         Ok(Self { client })
     }
 }
 
-impl NodeBackend for GrpcBackend {
-    async fn publish(
+impl Transport for GrpcTransport {
+    fn publish(
         &mut self,
         region_id: [u8; 32],
         namespace: &str,
         payload: Vec<u8>,
-    ) -> Result<(), PublishError> {
-        self.client
-            .publish(region_id, namespace, payload)
-            .await
-            .map(|_| ())
-            .map_err(|e| PublishError(e.to_string()))
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>> {
+        let namespace = namespace.to_owned();
+        Box::pin(async move {
+            self.client
+                .publish(region_id, &namespace, payload)
+                .await
+                .map(|_| ())
+                .map_err(|e| TransportError(e.to_string()))
+        })
     }
 }

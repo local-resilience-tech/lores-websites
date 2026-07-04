@@ -699,6 +699,8 @@ name = "lores-app-node"
 version = "0.1.0"
 dependencies = [
  "lores-p2panda-client",
+ "serde",
+ "serde_json",
  "tokio",
  "tonic",
  "tracing",
@@ -745,9 +747,6 @@ version = "0.1.0"
 dependencies = [
  "lores-app-node",
  "serde",
- "serde_json",
- "tokio",
- "tracing",
 ]
 
 [[package]]

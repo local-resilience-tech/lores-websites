@@ -1,4 +1,6 @@
-mod backend;
-pub mod grpc;
+mod grpc;
+mod node;
+mod transport;
 
-pub use backend::{AppNode, NodeBackend, PublishError};
+pub use node::AppNode;
+pub use transport::TransportError;
