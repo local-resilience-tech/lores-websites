@@ -24,6 +24,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     #[derive(OpenApi)]
     #[openapi()]
     struct ApiDoc;
@@ -68,7 +69,7 @@ async fn main() {
         .layer(axum::Extension(node));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("backend listening on http://{addr}");
+    tracing::info!("backend listening on http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

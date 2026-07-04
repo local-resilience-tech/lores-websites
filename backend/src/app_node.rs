@@ -30,10 +30,10 @@ impl AppNode {
                     .publish(self.region_id, &self.namespace, payload)
                     .await
                 {
-                    eprintln!("Failed to publish operation: {e}");
+                    tracing::error!("Failed to publish operation: {e}");
                 }
             }
-            Err(e) => eprintln!("Failed to serialize operation: {e}"),
+            Err(e) => tracing::error!("Failed to serialize operation: {e}"),
         }
     }
 }

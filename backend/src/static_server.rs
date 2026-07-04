@@ -17,7 +17,7 @@ lazy_static! {
 
 pub async fn frontend_handler(uri: Uri) -> Result<Response<Body>, (StatusCode, String)> {
     if uri.path().starts_with("/api") {
-        println!(
+        tracing::warn!(
             "API call detected, not serving static files for URI: {}",
             uri
         );
@@ -35,7 +35,7 @@ pub async fn frontend_handler(uri: Uri) -> Result<Response<Body>, (StatusCode, S
         StatusCode::NOT_FOUND => {
             // serve the HTML file for SPA routing
             let spa_file_path_string = FRONTEND_PATH.clone() + "/index.html";
-            println!(
+            tracing::info!(
                 "Serving SPA index.html for URI: {}, using path {}",
                 uri.clone(),
                 spa_file_path_string
@@ -46,7 +46,7 @@ pub async fn frontend_handler(uri: Uri) -> Result<Response<Body>, (StatusCode, S
         }
         other => {
             // If the status is not OK or NOT_FOUND, return the response as is
-            println!("Got other status: {}", other);
+            tracing::warn!("Got other status: {}", other);
             return Ok(res);
         }
     }
@@ -61,7 +61,7 @@ async fn serve_file(
     match ServeFile::new(spa_file_path_string).oneshot(req).await {
         Ok(res) => Ok(res.map(|b| Body::new(b))),
         Err(err) => {
-            println!("Error serving static file: {}", err);
+            tracing::error!("Error serving static file: {}", err);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Something went wrong: {}", err),
@@ -77,7 +77,7 @@ async fn serve_dir(uri: Uri, static_dir: String) -> Result<Response<Body>, (Stat
     match ServeDir::new(static_dir).oneshot(req).await {
         Ok(res) => Ok(res.map(|b| Body::new(b))),
         Err(err) => {
-            println!("Error serving static file: {}", err);
+            tracing::error!("Error serving static file: {}", err);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Something went wrong: {}", err),
