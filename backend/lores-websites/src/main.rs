@@ -7,7 +7,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::static_server::frontend_handler;
-use lores_websites_node::AppNode;
+use lores_websites_node::LoresWebsiteNode;
 
 mod events;
 mod public_api;
@@ -32,7 +32,7 @@ async fn main() {
     let panda_grpc_addr =
         std::env::var("PANDA_GRPC_ADDR").unwrap_or_else(|_| PANDA_GRPC_ADDR_DEFAULT.to_string());
 
-    let node = AppNode::connect(panda_grpc_addr, [0u8; 32], APP_NAMESPACE);
+    let node = LoresWebsiteNode::connect(panda_grpc_addr, [0u8; 32], APP_NAMESPACE);
 
     let state = AppState {
         websites: Arc::new(Mutex::new(vec![

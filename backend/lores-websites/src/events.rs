@@ -1,8 +1,8 @@
-use lores_websites_node::{operations::AppOperation, AppNode};
+use lores_websites_node::{operations::AppOperation, LoresWebsiteNode};
 
 use crate::AppState;
 
-pub fn register_event_handlers(node: &AppNode, state: AppState) {
+pub fn register_event_handlers(node: &LoresWebsiteNode, state: AppState) {
     let mut rx = node.subscribe();
 
     tokio::spawn(async move {

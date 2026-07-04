@@ -9,12 +9,12 @@ pub mod operations;
 type Inner = BaseAppNode<GrpcBackend>;
 
 #[derive(Clone)]
-pub struct AppNode {
+pub struct LoresWebsiteNode {
     inner: Arc<Inner>,
     event_tx: broadcast::Sender<AppOperation>,
 }
 
-impl AppNode {
+impl LoresWebsiteNode {
     pub fn connect(grpc_addr: String, region_id: [u8; 32], namespace: impl Into<String>) -> Self {
         let backend =
             GrpcBackend::connect_lazy(grpc_addr).expect("failed to connect to panda gRPC endpoint");

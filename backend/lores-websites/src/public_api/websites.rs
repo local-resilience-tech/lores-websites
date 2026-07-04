@@ -6,7 +6,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::AppState;
 use lores_websites_node::{
     operations::{AppOperation, WebsiteCreatedDataV1},
-    AppNode,
+    LoresWebsiteNode,
 };
 
 #[derive(Clone, Serialize, ToSchema)]
@@ -48,7 +48,7 @@ pub async fn websites_index(Extension(state): Extension<AppState>) -> impl IntoR
     )
 )]
 pub async fn create_website(
-    Extension(app_node): Extension<AppNode>,
+    Extension(app_node): Extension<LoresWebsiteNode>,
     Json(payload): Json<CreateWebsiteData>,
 ) -> impl IntoResponse {
     let website = Website {
