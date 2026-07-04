@@ -4,8 +4,10 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    app_node::AppNode,
-    operations::{AppOperation, WebsiteCreatedDataV1},
+    app_node::{
+        operations::{AppOperation, WebsiteCreatedDataV1},
+        AppNode,
+    },
     AppState,
 };
 

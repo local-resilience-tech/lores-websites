@@ -3,5 +3,5 @@ procs:
     shell: "npm run dev"
     cwd: "./frontend"
   backend:
-    shell: "cargo run"
+    shell: "RUST_LOG=info cargo run"
     cwd: "./backend"

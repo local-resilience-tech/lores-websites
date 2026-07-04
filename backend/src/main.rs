@@ -9,7 +9,6 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::{app_node::AppNode, static_server::frontend_handler};
 
 mod app_node;
-mod operations;
 mod public_api;
 mod realtime;
 mod static_server;

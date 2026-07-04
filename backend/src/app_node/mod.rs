@@ -4,6 +4,8 @@ use lores_p2panda_client::PandaClient;
 use serde::Serialize;
 use tokio::sync::Mutex;
 
+pub mod operations;
+
 #[derive(Clone)]
 pub struct AppNode {
     pub region_id: [u8; 32],
