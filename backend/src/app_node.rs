@@ -8,19 +8,17 @@ use tokio::sync::Mutex;
 pub struct AppNode {
     pub region_id: [u8; 32],
     pub namespace: String,
-    pub panda: Arc<Mutex<PandaClient>>,
+    panda: Arc<Mutex<PandaClient>>,
 }
 
 impl AppNode {
-    pub fn new(
-        region_id: [u8; 32],
-        namespace: impl Into<String>,
-        panda: Arc<Mutex<PandaClient>>,
-    ) -> Self {
+    pub fn connect(grpc_addr: String, region_id: [u8; 32], namespace: impl Into<String>) -> Self {
+        let panda =
+            PandaClient::connect_lazy(grpc_addr).expect("failed to connect to panda gRPC endpoint");
         Self {
             region_id,
             namespace: namespace.into(),
-            panda,
+            panda: Arc::new(Mutex::new(panda)),
         }
     }
 

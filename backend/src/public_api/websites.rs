@@ -4,7 +4,7 @@ use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    node::AppNode,
+    app_node::AppNode,
     operations::{AppOperation, WebsiteCreatedDataV1},
     AppState,
 };
@@ -49,7 +49,7 @@ pub async fn websites_index(Extension(state): Extension<AppState>) -> impl IntoR
 )]
 pub async fn create_website(
     Extension(state): Extension<AppState>,
-    Extension(node): Extension<AppNode>,
+    Extension(app_node): Extension<AppNode>,
     Json(payload): Json<CreateWebsiteData>,
 ) -> impl IntoResponse {
     let website = Website {
@@ -58,11 +58,12 @@ pub async fn create_website(
     };
 
     // Broadcast a "website created" operation over the lores-p2panda network.
-    node.publish(&AppOperation::WebsiteCreatedV1(WebsiteCreatedDataV1 {
-        name: payload.name.clone(),
-        description: payload.description.clone(),
-    }))
-    .await;
+    app_node
+        .publish(&AppOperation::WebsiteCreatedV1(WebsiteCreatedDataV1 {
+            name: payload.name.clone(),
+            description: payload.description.clone(),
+        }))
+        .await;
 
     state.websites.lock().await.push(website.clone());
     (StatusCode::CREATED, Json(website))

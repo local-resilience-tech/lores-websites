@@ -1,16 +1,14 @@
 use axum::routing::get;
-use lores_p2panda_client::PandaClient;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::static_server::frontend_handler;
+use crate::{app_node::AppNode, static_server::frontend_handler};
 
-mod node;
+mod app_node;
 mod operations;
 mod public_api;
 mod realtime;
@@ -21,9 +19,6 @@ const APP_NAMESPACE: &str = "static-sites:v1";
 
 #[derive(Clone)]
 pub struct AppState {
-    pub panda: Arc<Mutex<PandaClient>>,
-    pub channels: Arc<Mutex<HashMap<[u8; 32], broadcast::Sender<Vec<u8>>>>>,
-    pub app_namespace: String,
     pub websites: Arc<Mutex<Vec<public_api::websites::Website>>>,
 }
 
@@ -36,14 +31,9 @@ async fn main() {
     let panda_grpc_addr =
         std::env::var("PANDA_GRPC_ADDR").unwrap_or_else(|_| PANDA_GRPC_ADDR_DEFAULT.to_string());
 
-    let panda = PandaClient::connect_lazy(panda_grpc_addr)
-        .expect("failed to connect to panda gRPC endpoint");
-    let panda = Arc::new(Mutex::new(panda));
+    let node = AppNode::connect(panda_grpc_addr, [0u8; 32], APP_NAMESPACE);
 
     let state = AppState {
-        panda: panda.clone(),
-        channels: Arc::new(Mutex::new(HashMap::new())),
-        app_namespace: APP_NAMESPACE.to_string(),
         websites: Arc::new(Mutex::new(vec![
             public_api::websites::Website {
                 name: "Example Site".to_string(),
@@ -75,11 +65,7 @@ async fn main() {
         .route("/ws/{region_id}", get(realtime::handler))
         .fallback_service(get(frontend_handler))
         .layer(axum::Extension(state))
-        .layer(axum::Extension(node::AppNode::new(
-            [0u8; 32],
-            APP_NAMESPACE,
-            panda,
-        )));
+        .layer(axum::Extension(node));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("backend listening on http://{addr}");
