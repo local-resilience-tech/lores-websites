@@ -2,7 +2,7 @@ use lores_p2panda_client::PandaClient;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use self::operations::AppOperation;
+use crate::operations::AppOperation;
 
 pub mod operations;
 

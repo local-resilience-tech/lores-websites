@@ -22,7 +22,7 @@ COPY deployment/cargo-config.toml ./.cargo/config
 # Compile the backend
 COPY ./backend .
 RUN cargo build --release --target $(cat /app/.platform)
-RUN cp /app/target/$(cat /app/.platform)/release/lores-static-sites /app/backend-bin
+RUN cp /app/target/$(cat /app/.platform)/release/lores-websites /app/backend-bin
 
 # RUNNER
 FROM ubuntu AS runner

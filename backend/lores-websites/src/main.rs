@@ -6,9 +6,9 @@ use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{app_node::AppNode, static_server::frontend_handler};
+use crate::static_server::frontend_handler;
+use lores_websites_node::AppNode;
 
-mod app_node;
 mod public_api;
 mod realtime;
 mod static_server;

@@ -3,12 +3,10 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{
-    app_node::{
-        operations::{AppOperation, WebsiteCreatedDataV1},
-        AppNode,
-    },
-    AppState,
+use crate::AppState;
+use lores_websites_node::{
+    operations::{AppOperation, WebsiteCreatedDataV1},
+    AppNode,
 };
 
 #[derive(Clone, Serialize, ToSchema)]

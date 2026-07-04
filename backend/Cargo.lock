@@ -709,14 +709,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "lores-static-sites"
+name = "lores-websites"
 version = "0.1.4"
 dependencies = [
  "axum",
  "futures-util",
  "hex",
  "lazy_static",
- "lores-p2panda-client",
+ "lores-websites-node",
  "serde",
  "serde_json",
  "tokio",
@@ -727,6 +727,17 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "utoipa-swagger-ui",
+]
+
+[[package]]
+name = "lores-websites-node"
+version = "0.1.0"
+dependencies = [
+ "lores-p2panda-client",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
