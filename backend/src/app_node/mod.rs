@@ -1,8 +1,8 @@
-use std::sync::Arc;
-
 use lores_p2panda_client::PandaClient;
-use serde::Serialize;
+use std::sync::Arc;
 use tokio::sync::Mutex;
+
+use self::operations::AppOperation;
 
 pub mod operations;
 
@@ -24,7 +24,7 @@ impl AppNode {
         }
     }
 
-    pub async fn publish(&self, operation: &impl Serialize) {
+    pub async fn publish(&self, operation: &AppOperation) {
         match serde_json::to_vec(operation) {
             Ok(payload) => {
                 let mut client = self.panda.lock().await;
