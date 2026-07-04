@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use serde::Serialize;
+use sqlx::SqlitePool;
 use tokio::sync::{broadcast, Mutex};
 
 use crate::grpc::GrpcOperationStore;
+use crate::local::LocalOperationStore;
 use crate::store::OperationStore;
 
 /// The central node handle used by application code.
@@ -49,6 +51,18 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
             transport: Arc::new(Mutex::new(transport)),
             event_tx,
         }
+    }
+
+    /// Create a local-only `AppNode` backed by a SQLite store.
+    ///
+    /// Operations are persisted locally and never forwarded to a remote node.
+    pub async fn local(
+        pool: SqlitePool,
+        region_id: [u8; 32],
+        namespace: impl Into<String>,
+    ) -> Result<Self, sqlx::Error> {
+        let store = LocalOperationStore::new(pool).await?;
+        Ok(Self::new(region_id, namespace, Box::new(store)))
     }
 
     /// Create an `AppNode` connected to an external lores-node via gRPC.

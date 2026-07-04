@@ -1,4 +1,5 @@
 mod grpc;
+mod local;
 mod node;
 mod store;
 
