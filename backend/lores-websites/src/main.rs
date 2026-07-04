@@ -9,6 +9,7 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::static_server::frontend_handler;
 use lores_websites_node::AppNode;
 
+mod events;
 mod public_api;
 mod realtime;
 mod static_server;
@@ -49,6 +50,8 @@ async fn main() {
             },
         ])),
     };
+
+    events::register_event_handlers(&node, state.clone());
 
     let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/public_api", public_api::router())

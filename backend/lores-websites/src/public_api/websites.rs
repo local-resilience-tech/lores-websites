@@ -48,7 +48,6 @@ pub async fn websites_index(Extension(state): Extension<AppState>) -> impl IntoR
     )
 )]
 pub async fn create_website(
-    Extension(state): Extension<AppState>,
     Extension(app_node): Extension<AppNode>,
     Json(payload): Json<CreateWebsiteData>,
 ) -> impl IntoResponse {
@@ -65,6 +64,5 @@ pub async fn create_website(
         }))
         .await;
 
-    state.websites.lock().await.push(website.clone());
     (StatusCode::CREATED, Json(website))
 }
