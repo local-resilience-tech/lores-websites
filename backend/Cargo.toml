@@ -1,5 +1,5 @@
 [workspace]
-members = ["lores-websites", "lores-websites-node"]
+members = ["lores-websites", "lores-websites-node", "lores-app-node"]
 resolver = "2"
 
 [workspace.dependencies]

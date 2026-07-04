@@ -1,31 +1,27 @@
-use lores_p2panda_client::PandaClient;
+use lores_app_node::{grpc::GrpcBackend, AppNode as BaseAppNode};
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tokio::sync::Mutex;
 
 use crate::operations::AppOperation;
 
 pub mod operations;
 
+type Inner = BaseAppNode<GrpcBackend>;
+
 #[derive(Clone)]
 pub struct AppNode {
-    pub region_id: [u8; 32],
-    pub namespace: String,
-    panda: Arc<Mutex<PandaClient>>,
+    inner: Arc<Inner>,
     event_tx: broadcast::Sender<AppOperation>,
 }
 
 impl AppNode {
     pub fn connect(grpc_addr: String, region_id: [u8; 32], namespace: impl Into<String>) -> Self {
-        let panda =
-            PandaClient::connect_lazy(grpc_addr).expect("failed to connect to panda gRPC endpoint");
+        let backend =
+            GrpcBackend::connect_lazy(grpc_addr).expect("failed to connect to panda gRPC endpoint");
+        let namespace = namespace.into();
+        let inner = Arc::new(BaseAppNode::new(region_id, namespace, backend));
         let (event_tx, _) = broadcast::channel(64);
-        Self {
-            region_id,
-            namespace: namespace.into(),
-            panda: Arc::new(Mutex::new(panda)),
-            event_tx,
-        }
+        Self { inner, event_tx }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<AppOperation> {
@@ -35,11 +31,7 @@ impl AppNode {
     pub async fn publish(&self, operation: &AppOperation) {
         match serde_json::to_vec(operation) {
             Ok(payload) => {
-                let mut client = self.panda.lock().await;
-                if let Err(e) = client
-                    .publish(self.region_id, &self.namespace, payload)
-                    .await
-                {
+                if let Err(e) = self.inner.publish_raw(payload).await {
                     tracing::error!("Failed to publish operation: {e}");
                 }
             }
