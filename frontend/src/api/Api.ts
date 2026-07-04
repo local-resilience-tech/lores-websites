@@ -195,11 +195,6 @@ export class HttpClient<SecurityDataType = unknown> {
   };
 }
 
-/**
- * @title lores-static-sites
- * @version 0.1.4
- * @license
- */
 export class Api<
   SecurityDataType extends unknown,
 > extends HttpClient<SecurityDataType> {

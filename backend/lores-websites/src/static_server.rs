@@ -93,5 +93,5 @@ fn apply_etag_header(response: &mut Response<Body>) {
 }
 
 fn app_version_etag() -> String {
-    format!("\"lores-static-sites-{}\"", APP_VERSION)
+    format!("\"lores-websites-{}\"", APP_VERSION)
 }
