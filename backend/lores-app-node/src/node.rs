@@ -3,8 +3,8 @@ use std::sync::Arc;
 use serde::Serialize;
 use tokio::sync::{broadcast, Mutex};
 
-use crate::grpc::GrpcTransport;
-use crate::transport::Transport;
+use crate::grpc::GrpcOperationStore;
+use crate::store::OperationStore;
 
 /// The central node handle used by application code.
 ///
@@ -21,7 +21,7 @@ use crate::transport::Transport;
 pub struct AppNode<Op> {
     pub region_id: [u8; 32],
     pub namespace: String,
-    transport: Arc<Mutex<Box<dyn Transport>>>,
+    transport: Arc<Mutex<Box<dyn OperationStore>>>,
     event_tx: broadcast::Sender<Op>,
 }
 
@@ -40,7 +40,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     fn new(
         region_id: [u8; 32],
         namespace: impl Into<String>,
-        transport: Box<dyn Transport>,
+        transport: Box<dyn OperationStore>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
         Self {
@@ -55,7 +55,8 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     ///
     /// Uses a lazy connection — no network call until the first publish.
     pub fn grpc(grpc_addr: String, region_id: [u8; 32], namespace: impl Into<String>) -> Self {
-        let transport = GrpcTransport::connect_lazy(grpc_addr)
+        let namespace = namespace.into();
+        let transport = GrpcOperationStore::connect_lazy(grpc_addr, region_id, namespace.clone())
             .expect("failed to build gRPC transport endpoint");
         Self::new(region_id, namespace, Box::new(transport))
     }
@@ -70,7 +71,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         match serde_json::to_vec(operation) {
             Ok(payload) => {
                 let mut t = self.transport.lock().await;
-                if let Err(e) = t.publish(self.region_id, &self.namespace, payload).await {
+                if let Err(e) = t.publish(payload).await {
                     tracing::error!("Failed to publish operation: {e}");
                 }
             }

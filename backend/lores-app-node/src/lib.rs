@@ -1,6 +1,6 @@
 mod grpc;
 mod node;
-mod transport;
+mod store;
 
 pub use node::AppNode;
-pub use transport::TransportError;
+pub use store::StoreError;
