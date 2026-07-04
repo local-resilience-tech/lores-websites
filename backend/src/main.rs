@@ -10,6 +10,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::static_server::frontend_handler;
 
+mod node;
+mod operations;
 mod public_api;
 mod realtime;
 mod static_server;
@@ -39,7 +41,7 @@ async fn main() {
     let panda = Arc::new(Mutex::new(panda));
 
     let state = AppState {
-        panda,
+        panda: panda.clone(),
         channels: Arc::new(Mutex::new(HashMap::new())),
         app_namespace: APP_NAMESPACE.to_string(),
         websites: Arc::new(Mutex::new(vec![
@@ -72,7 +74,12 @@ async fn main() {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()))
         .route("/ws/{region_id}", get(realtime::handler))
         .fallback_service(get(frontend_handler))
-        .layer(axum::Extension(state));
+        .layer(axum::Extension(state))
+        .layer(axum::Extension(node::AppNode::new(
+            [0u8; 32],
+            APP_NAMESPACE,
+            panda,
+        )));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("backend listening on http://{addr}");
