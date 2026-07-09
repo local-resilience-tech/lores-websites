@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use lores_p2panda_client::PandaClient;
+use lores_p2panda_client::{PandaClient, PandaError};
 
 use crate::store::{OperationStore, StoreError};
 
@@ -43,7 +43,10 @@ impl OperationStore for GrpcOperationStore {
                 )
                 .await
                 .map(|_| ())
-                .map_err(|e| StoreError(e.to_string()))
+                .map_err(|e| match e {
+                    PandaError::RegionNotBound(msg) => StoreError::RegionNotBound(msg),
+                    PandaError::Rpc(s) => StoreError::Other(s.to_string()),
+                })
         })
     }
 }

@@ -7,7 +7,7 @@ use tokio::sync::{broadcast, Mutex};
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
 use crate::outbox::OutboxStore;
-use crate::store::OperationStore;
+use crate::store::{OperationStore, StoreError};
 
 /// The central node handle used by application code.
 ///
@@ -107,16 +107,15 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     }
 
     /// Serialize and publish an operation, then broadcast it locally.
-    pub async fn publish(&self, operation: &Op) {
+    pub async fn publish(&self, operation: &Op) -> Result<(), StoreError> {
         match serde_json::to_vec(operation) {
             Ok(payload) => {
                 let mut t = self.transport.lock().await;
-                if let Err(e) = t.publish(payload, None).await {
-                    tracing::error!("Failed to publish operation: {e}");
-                }
+                t.publish(payload, None).await?;
             }
             Err(e) => tracing::error!("Failed to serialize operation: {e}"),
         }
         let _ = self.event_tx.send(operation.clone());
+        Ok(())
     }
 }

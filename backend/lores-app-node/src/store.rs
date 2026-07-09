@@ -3,11 +3,19 @@ use std::pin::Pin;
 
 /// Error returned by a [`Transport`] publish call.
 #[derive(Debug)]
-pub struct StoreError(pub String);
+pub enum StoreError {
+    /// No region has been bound to the given app/instance on the server.
+    RegionNotBound(String),
+    /// Any other error.
+    Other(String),
+}
 
 impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            StoreError::RegionNotBound(msg) => write!(f, "{msg}"),
+            StoreError::Other(msg) => write!(f, "{msg}"),
+        }
     }
 }
 

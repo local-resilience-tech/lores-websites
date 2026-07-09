@@ -57,12 +57,17 @@ pub async fn create_website(
     };
 
     // Broadcast a "website created" operation over the lores-p2panda network.
-    app_node
+    match app_node
         .publish(&AppOperation::WebsiteCreatedV1(WebsiteCreatedDataV1 {
             name: payload.name.clone(),
             description: payload.description.clone(),
         }))
-        .await;
-
-    (StatusCode::CREATED, Json(website))
+        .await
+    {
+        Ok(()) => (StatusCode::CREATED, Json(website)).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to publish operation: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }

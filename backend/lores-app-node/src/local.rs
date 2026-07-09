@@ -71,7 +71,7 @@ impl OperationStore for LocalOperationStore {
             self.insert(payload)
                 .await
                 .map(|_| ())
-                .map_err(|e| StoreError(e.to_string()))
+                .map_err(|e| StoreError::Other(e.to_string()))
         })
     }
 }

@@ -973,9 +973,9 @@ dependencies = [
 
 [[package]]
 name = "lores-p2panda-client"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c2d593c2895e21526a2c0339eea9055558af332efaf8e967267377a15f55da2"
+checksum = "f8b7831217abde329165c589297c1b78a93f96e61b44bc88c821c8c13e92bcb6"
 dependencies = [
  "prost",
  "tokio",

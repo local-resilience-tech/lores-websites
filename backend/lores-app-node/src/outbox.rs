@@ -36,7 +36,7 @@ impl OperationStore for OutboxStore {
                 .local
                 .insert(payload.clone())
                 .await
-                .map_err(|e| StoreError(e.to_string()))?;
+                .map_err(|e| StoreError::Other(e.to_string()))?;
 
             let key = Some(id.to_string());
 
@@ -50,11 +50,9 @@ impl OperationStore for OutboxStore {
                     Ok(())
                 }
                 Err(e) => {
-                    // Leave in local store for future drain attempt.
-                    tracing::warn!(
-                        "gRPC delivery failed for op {id}, retained in local store: {e}"
-                    );
-                    Ok(()) // not an error from the caller's perspective — op is safe locally
+                    tracing::warn!("gRPC delivery failed for op {id}: {e}");
+                    // Leave in local store for a future drain attempt.
+                    Ok(())
                 }
             }
         })
