@@ -61,6 +61,9 @@ async fn main() {
 
     events::register_event_handlers(&node, state.clone());
 
+    let run_node = node.clone();
+    tokio::spawn(async move { run_node.run().await });
+
     let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/public_api", public_api::router())
         .split_for_parts();
