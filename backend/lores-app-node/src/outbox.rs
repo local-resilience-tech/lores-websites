@@ -2,7 +2,7 @@ use std::pin::Pin;
 
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
-use crate::store::{OperationStore, StoreError};
+use crate::store::{OperationStore, OperationStream, StoreError};
 
 /// [`OperationStore`] decorator that combines a [`LocalOperationStore`] and a
 /// [`GrpcOperationStore`].
@@ -56,5 +56,12 @@ impl OperationStore for OutboxStore {
                 }
             }
         })
+    }
+
+    fn subscribe(
+        &mut self,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<OperationStream, StoreError>> + Send + '_>>
+    {
+        self.remote.subscribe()
     }
 }

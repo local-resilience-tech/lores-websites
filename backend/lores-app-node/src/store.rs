@@ -1,7 +1,9 @@
 use std::future::Future;
 use std::pin::Pin;
 
-/// Error returned by a [`Transport`] publish call.
+use futures::Stream;
+
+/// Error returned by [`OperationStore`] methods.
 #[derive(Debug)]
 pub enum StoreError {
     /// No region has been bound to the given app/instance on the server.
@@ -21,6 +23,9 @@ impl std::fmt::Display for StoreError {
 
 impl std::error::Error for StoreError {}
 
+/// A boxed, heap-allocated stream of raw operation payloads.
+pub(crate) type OperationStream = Pin<Box<dyn Stream<Item = Result<Vec<u8>, StoreError>> + Send>>;
+
 /// Internal trait over raw-bytes operation delivery.
 ///
 /// App developers never interact with this directly — they use [`crate::AppNode`]
@@ -31,4 +36,12 @@ pub(crate) trait OperationStore: Send + Sync + 'static {
         payload: Vec<u8>,
         idempotency_key: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<(), StoreError>> + Send + '_>>;
+
+    /// Open a subscription to incoming operations.
+    ///
+    /// The outer `Result` covers connection-time errors (e.g. `RegionNotBound`).
+    /// The inner stream yields individual operation payloads or per-item errors.
+    fn subscribe(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<OperationStream, StoreError>> + Send + '_>>;
 }

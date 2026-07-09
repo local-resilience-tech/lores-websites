@@ -1,8 +1,18 @@
 use std::pin::Pin;
 
+use futures::StreamExt;
 use lores_p2panda_client::{PandaClient, PandaError};
 
-use crate::store::{OperationStore, StoreError};
+use crate::store::{OperationStore, OperationStream, StoreError};
+
+impl From<PandaError> for StoreError {
+    fn from(e: PandaError) -> Self {
+        match e {
+            PandaError::RegionNotBound(msg) => StoreError::RegionNotBound(msg),
+            PandaError::Rpc(s) => StoreError::Other(s.to_string()),
+        }
+    }
+}
 
 /// [`OperationStore`] implementation that forwards operations to a lores-node
 /// instance via gRPC using [`PandaClient`].
@@ -43,10 +53,27 @@ impl OperationStore for GrpcOperationStore {
                 )
                 .await
                 .map(|_| ())
-                .map_err(|e| match e {
-                    PandaError::RegionNotBound(msg) => StoreError::RegionNotBound(msg),
-                    PandaError::Rpc(s) => StoreError::Other(s.to_string()),
-                })
+                .map_err(StoreError::from)
+        })
+    }
+
+    fn subscribe(
+        &mut self,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<OperationStream, StoreError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let response = self
+                .client
+                .subscribe(&self.app_id, &self.instance_id)
+                .await
+                .map_err(StoreError::from)?;
+
+            let stream: OperationStream = Box::pin(response.into_inner().map(|item| {
+                item.map(|event| event.payload)
+                    .map_err(|s| StoreError::Other(s.to_string()))
+            }));
+
+            Ok(stream)
         })
     }
 }

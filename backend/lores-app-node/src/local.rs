@@ -1,8 +1,9 @@
 use std::pin::Pin;
 
+use futures::stream;
 use sqlx::SqlitePool;
 
-use crate::store::{OperationStore, StoreError};
+use crate::store::{OperationStore, OperationStream, StoreError};
 
 /// [`OperationStore`] implementation backed by a local SQLite database.
 ///
@@ -72,6 +73,16 @@ impl OperationStore for LocalOperationStore {
                 .await
                 .map(|_| ())
                 .map_err(|e| StoreError::Other(e.to_string()))
+        })
+    }
+
+    fn subscribe(
+        &mut self,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<OperationStream, StoreError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let s: OperationStream = Box::pin(stream::empty());
+            Ok(s)
         })
     }
 }
