@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, watch, Mutex};
 
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
@@ -43,7 +43,7 @@ pub struct AppNode<Op> {
     pub instance_id: String,
     transport: Arc<Mutex<Box<dyn OperationStore>>>,
     event_tx: broadcast::Sender<Op>,
-    error_tx: broadcast::Sender<NodeError>,
+    error_tx: watch::Sender<Option<NodeError>>,
 }
 
 impl<Op> Clone for AppNode<Op> {
@@ -65,7 +65,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         transport: Box<dyn OperationStore>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
-        let (error_tx, _) = broadcast::channel(16);
+        let (error_tx, _) = watch::channel(None);
         Self {
             app_id: app_id.into(),
             instance_id: instance_id.into(),
@@ -127,8 +127,11 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         self.event_tx.subscribe()
     }
 
-    /// Subscribe to node-level errors (e.g. [`NodeError::RegionNotBound`]).
-    pub fn subscribe_errors(&self) -> broadcast::Receiver<NodeError> {
+    /// Watch the current node error state.
+    ///
+    /// The receiver immediately reflects the current value, so callers that
+    /// subscribe after an error was set will see it right away.
+    pub fn subscribe_errors(&self) -> watch::Receiver<Option<NodeError>> {
         self.error_tx.subscribe()
     }
 
@@ -164,7 +167,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
                 Ok(s) => s,
                 Err(StoreError::RegionNotBound(msg)) => {
                     tracing::warn!("Subscribe failed — region not bound: {msg}");
-                    let _ = self.error_tx.send(NodeError::RegionNotBound(msg));
+                    self.error_tx.send_replace(Some(NodeError::RegionNotBound(msg)));
                     return;
                 }
                 Err(StoreError::Other(msg)) => {
@@ -186,7 +189,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
                     }
                     Err(StoreError::RegionNotBound(msg)) => {
                         tracing::warn!("Region unbound mid-stream: {msg}");
-                        let _ = self.error_tx.send(NodeError::RegionNotBound(msg));
+                        self.error_tx.send_replace(Some(NodeError::RegionNotBound(msg)));
                         return;
                     }
                 }

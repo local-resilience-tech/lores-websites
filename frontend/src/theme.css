@@ -41,8 +41,8 @@
   --ink: #2e2e2e;
 
   /* Brand = dark pink → light pink scale */
-  --wa-color-brand-fill-quiet: color-mix(in srgb, var(--color-pink-3) 20%, transparent);
-  --wa-color-brand-fill-normal: color-mix(in srgb, var(--color-pink-3) 40%, transparent);
+  /* --wa-color-brand-fill-quiet: color-mix(in srgb, var(--color-pink-3) 20%, transparent);
+  --wa-color-brand-fill-normal: color-mix(in srgb, var(--color-pink-3) 40%, transparent); */
   --wa-color-brand-fill-loud: var(--color-pink-6);
   --wa-color-brand-border-quiet: var(--color-pink-3);
   --wa-color-brand-border-normal: var(--color-pink-6);
@@ -52,6 +52,19 @@
   --wa-color-brand-on-loud: var(--white);
   --wa-color-focus: var(--color-pink-6);
 
+  /* Page background */
+  --wa-color-surface-default: var(--color-cyan-3);
+  --wa-color-surface-lowered: var(--color-cyan-4);
+  --wa-color-surface-raised: var(--color-cyan-2);
+  --wa-color-surface-border: var(--color-cyan-6);
+
+  /* Text */
+  --wa-color-text-normal: var(--ink);
+  --wa-color-text-quiet: var(--color-cyan-6);
+  --wa-color-text-link: var(--color-pink-6);
+}
+
+.wa-light {
   /* Page background */
   --wa-color-surface-default: var(--color-cyan-3);
   --wa-color-surface-lowered: var(--color-cyan-4);
