@@ -8,8 +8,8 @@ pub type LoresWebsiteNode = AppNode<AppOperation>;
 
 pub fn connect(
     grpc_addr: String,
-    region_id: [u8; 32],
-    namespace: impl Into<String>,
+    app_id: impl Into<String>,
+    instance_id: impl Into<String>,
 ) -> LoresWebsiteNode {
-    AppNode::grpc(grpc_addr, region_id, namespace)
+    AppNode::grpc(grpc_addr, app_id, instance_id)
 }

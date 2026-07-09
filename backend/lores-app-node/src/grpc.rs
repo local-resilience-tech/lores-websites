@@ -8,21 +8,21 @@ use crate::store::{OperationStore, StoreError};
 /// instance via gRPC using [`PandaClient`].
 pub(crate) struct GrpcOperationStore {
     client: PandaClient,
-    region_id: [u8; 32],
-    namespace: String,
+    app_id: String,
+    instance_id: String,
 }
 
 impl GrpcOperationStore {
     pub(crate) fn connect_lazy(
         grpc_addr: String,
-        region_id: [u8; 32],
-        namespace: String,
+        app_id: impl Into<String>,
+        instance_id: impl Into<String>,
     ) -> Result<Self, tonic::transport::Error> {
         let client = PandaClient::connect_lazy(grpc_addr)?;
         Ok(Self {
             client,
-            region_id,
-            namespace,
+            app_id: app_id.into(),
+            instance_id: instance_id.into(),
         })
     }
 }
@@ -34,7 +34,7 @@ impl OperationStore for GrpcOperationStore {
     ) -> Pin<Box<dyn std::future::Future<Output = Result<(), StoreError>> + Send + '_>> {
         Box::pin(async move {
             self.client
-                .publish(self.region_id, &self.namespace, payload)
+                .publish(&self.app_id, &self.instance_id, payload, None)
                 .await
                 .map(|_| ())
                 .map_err(|e| StoreError(e.to_string()))

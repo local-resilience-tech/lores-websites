@@ -18,11 +18,11 @@ use crate::store::OperationStore;
 /// ```no_run
 /// # use lores_app_node::AppNode;
 /// # #[derive(Clone, serde::Serialize)] enum Op {}
-/// let node = AppNode::<Op>::grpc("http://[::1]:50051".into(), [0u8; 32], "my-app");
+/// let node = AppNode::<Op>::grpc("http://[::1]:50051".into(), "my-app-id", "my-instance");
 /// ```
 pub struct AppNode<Op> {
-    pub region_id: [u8; 32],
-    pub namespace: String,
+    pub app_id: String,
+    pub instance_id: String,
     transport: Arc<Mutex<Box<dyn OperationStore>>>,
     event_tx: broadcast::Sender<Op>,
 }
@@ -30,8 +30,8 @@ pub struct AppNode<Op> {
 impl<Op> Clone for AppNode<Op> {
     fn clone(&self) -> Self {
         Self {
-            region_id: self.region_id,
-            namespace: self.namespace.clone(),
+            app_id: self.app_id.clone(),
+            instance_id: self.instance_id.clone(),
             transport: self.transport.clone(),
             event_tx: self.event_tx.clone(),
         }
@@ -40,14 +40,14 @@ impl<Op> Clone for AppNode<Op> {
 
 impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     fn new(
-        region_id: [u8; 32],
-        namespace: impl Into<String>,
+        app_id: impl Into<String>,
+        instance_id: impl Into<String>,
         transport: Box<dyn OperationStore>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
         Self {
-            region_id,
-            namespace: namespace.into(),
+            app_id: app_id.into(),
+            instance_id: instance_id.into(),
             transport: Arc::new(Mutex::new(transport)),
             event_tx,
         }
@@ -58,21 +58,26 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     /// Operations are persisted locally and never forwarded to a remote node.
     pub async fn local(
         pool: SqlitePool,
-        region_id: [u8; 32],
-        namespace: impl Into<String>,
+        app_id: impl Into<String>,
+        instance_id: impl Into<String>,
     ) -> Result<Self, sqlx::Error> {
         let store = LocalOperationStore::new(pool).await?;
-        Ok(Self::new(region_id, namespace, Box::new(store)))
+        Ok(Self::new(app_id, instance_id, Box::new(store)))
     }
 
     /// Create an `AppNode` connected to an external lores-node via gRPC.
     ///
     /// Uses a lazy connection — no network call until the first publish.
-    pub fn grpc(grpc_addr: String, region_id: [u8; 32], namespace: impl Into<String>) -> Self {
-        let namespace = namespace.into();
-        let transport = GrpcOperationStore::connect_lazy(grpc_addr, region_id, namespace.clone())
+    pub fn grpc(
+        grpc_addr: String,
+        app_id: impl Into<String>,
+        instance_id: impl Into<String>,
+    ) -> Self {
+        let app_id = app_id.into();
+        let instance_id = instance_id.into();
+        let transport = GrpcOperationStore::connect_lazy(grpc_addr, &app_id, &instance_id)
             .expect("failed to build gRPC transport endpoint");
-        Self::new(region_id, namespace, Box::new(transport))
+        Self::new(app_id, instance_id, Box::new(transport))
     }
 
     /// Subscribe to operations published through this node (loopback).

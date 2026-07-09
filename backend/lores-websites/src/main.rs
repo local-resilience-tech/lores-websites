@@ -13,8 +13,14 @@ mod public_api;
 mod realtime;
 mod static_server;
 
+const PANDA_GRPC_ADDR_ENV: &str = "PANDA_GRPC_ADDR";
 const PANDA_GRPC_ADDR_DEFAULT: &str = "http://127.0.0.1:50051";
-const APP_NAMESPACE: &str = "static-sites:v1";
+
+const APP_ID_ENV: &str = "LORES_APP_ID";
+const APP_ID_DEFAULT: &str = "lores-websites";
+
+const INSTANCE_ID_ENV: &str = "LORES_INSTANCE_ID";
+const INSTANCE_ID_DEFAULT: &str = "default";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -29,9 +35,12 @@ async fn main() {
     struct ApiDoc;
 
     let panda_grpc_addr =
-        std::env::var("PANDA_GRPC_ADDR").unwrap_or_else(|_| PANDA_GRPC_ADDR_DEFAULT.to_string());
+        std::env::var(PANDA_GRPC_ADDR_ENV).unwrap_or_else(|_| PANDA_GRPC_ADDR_DEFAULT.to_string());
+    let app_id = std::env::var(APP_ID_ENV).unwrap_or_else(|_| APP_ID_DEFAULT.to_string());
+    let instance_id =
+        std::env::var(INSTANCE_ID_ENV).unwrap_or_else(|_| INSTANCE_ID_DEFAULT.to_string());
 
-    let node = lores_websites_node::connect(panda_grpc_addr, [0u8; 32], APP_NAMESPACE);
+    let node = lores_websites_node::connect(panda_grpc_addr, &app_id, &instance_id);
 
     let state = AppState {
         websites: Arc::new(Mutex::new(vec![
