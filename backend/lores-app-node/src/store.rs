@@ -21,5 +21,6 @@ pub(crate) trait OperationStore: Send + Sync + 'static {
     fn publish(
         &mut self,
         payload: Vec<u8>,
+        idempotency_key: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<(), StoreError>> + Send + '_>>;
 }

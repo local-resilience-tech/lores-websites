@@ -13,6 +13,11 @@ pub(crate) struct LocalOperationStore {
     pool: SqlitePool,
 }
 
+pub(crate) struct LocalEntry {
+    pub id: i64,
+    pub payload: Vec<u8>,
+}
+
 impl LocalOperationStore {
     pub(crate) async fn new(pool: SqlitePool) -> Result<Self, sqlx::Error> {
         sqlx::query(
@@ -26,17 +31,44 @@ impl LocalOperationStore {
         .await?;
         Ok(Self { pool })
     }
+
+    /// Insert a payload and return the assigned id (used as idempotency key).
+    pub(crate) async fn insert(&self, payload: Vec<u8>) -> Result<i64, sqlx::Error> {
+        let result = sqlx::query("INSERT INTO lores_app_operations (payload) VALUES (?)")
+            .bind(payload)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Fetch the oldest entry, if any.
+    pub(crate) async fn next(&self) -> Result<Option<LocalEntry>, sqlx::Error> {
+        let row = sqlx::query_as::<_, (i64, Vec<u8>)>(
+            "SELECT id, payload FROM lores_app_operations ORDER BY id ASC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(id, payload)| LocalEntry { id, payload }))
+    }
+
+    /// Remove an entry by id after successful delivery.
+    pub(crate) async fn delete(&self, id: i64) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM lores_app_operations WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 impl OperationStore for LocalOperationStore {
     fn publish(
         &mut self,
         payload: Vec<u8>,
+        _idempotency_key: Option<String>,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<(), StoreError>> + Send + '_>> {
         Box::pin(async move {
-            sqlx::query("INSERT INTO lores_app_operations (payload) VALUES (?)")
-                .bind(payload)
-                .execute(&self.pool)
+            self.insert(payload)
                 .await
                 .map(|_| ())
                 .map_err(|e| StoreError(e.to_string()))

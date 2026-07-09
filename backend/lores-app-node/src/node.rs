@@ -6,6 +6,7 @@ use tokio::sync::{broadcast, Mutex};
 
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
+use crate::outbox::OutboxStore;
 use crate::store::OperationStore;
 
 /// The central node handle used by application code.
@@ -65,6 +66,26 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         Ok(Self::new(app_id, instance_id, Box::new(store)))
     }
 
+    /// Create an `AppNode` that persists to a local SQLite store and forwards
+    /// to lores-node via gRPC, using the local row id as an idempotency key.
+    ///
+    /// If gRPC delivery fails the operation is retained locally for a future
+    /// drain attempt.
+    pub async fn grpc_with_local(
+        pool: SqlitePool,
+        grpc_addr: String,
+        app_id: impl Into<String>,
+        instance_id: impl Into<String>,
+    ) -> Result<Self, sqlx::Error> {
+        let app_id = app_id.into();
+        let instance_id = instance_id.into();
+        let local = LocalOperationStore::new(pool).await?;
+        let remote = GrpcOperationStore::connect_lazy(grpc_addr, &app_id, &instance_id)
+            .expect("failed to build gRPC transport endpoint");
+        let store = OutboxStore::new(local, remote);
+        Ok(Self::new(app_id, instance_id, Box::new(store)))
+    }
+
     /// Create an `AppNode` connected to an external lores-node via gRPC.
     ///
     /// Uses a lazy connection — no network call until the first publish.
@@ -90,7 +111,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         match serde_json::to_vec(operation) {
             Ok(payload) => {
                 let mut t = self.transport.lock().await;
-                if let Err(e) = t.publish(payload).await {
+                if let Err(e) = t.publish(payload, None).await {
                     tracing::error!("Failed to publish operation: {e}");
                 }
             }

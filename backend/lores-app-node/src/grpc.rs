@@ -31,10 +31,16 @@ impl OperationStore for GrpcOperationStore {
     fn publish(
         &mut self,
         payload: Vec<u8>,
+        idempotency_key: Option<String>,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<(), StoreError>> + Send + '_>> {
         Box::pin(async move {
             self.client
-                .publish(&self.app_id, &self.instance_id, payload, None)
+                .publish(
+                    &self.app_id,
+                    &self.instance_id,
+                    payload,
+                    idempotency_key.map(|k| k.into_bytes()),
+                )
                 .await
                 .map(|_| ())
                 .map_err(|e| StoreError(e.to_string()))
