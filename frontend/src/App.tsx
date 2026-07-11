@@ -66,11 +66,13 @@ export function App() {
       <Content>
         {errorBanner && (
           <wa-callout variant="danger" appearance="filled" style={{ marginBottom: "var(--wa-space-m)" }}>
-            <wa-icon slot="icon" name="exclamation-octagon"></wa-icon>
-            {errorBanner}
-            <wa-button slot="footer" variant="neutral" size="small" onClick={() => setErrorBanner(null)}>
-              Dismiss
-            </wa-button>
+            <wa-icon slot="icon" name="circle-exclamation"></wa-icon>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              {errorBanner}
+              <wa-button variant="neutral" size="small" onClick={() => setErrorBanner(null)}>
+                Dismiss
+              </wa-button>
+            </div>
           </wa-callout>
         )}
 
