@@ -1,4 +1,8 @@
-use axum::{Extension, extract::ws::{Message, WebSocket, WebSocketUpgrade}, response::IntoResponse};
+use axum::{
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    response::IntoResponse,
+    Extension,
+};
 use lores_websites_node::LoresWebsiteNode;
 
 pub async fn handler(
@@ -22,7 +26,11 @@ async fn handle_socket(mut socket: WebSocket, node: LoresWebsiteNode) {
         if let Some(error) = error {
             tracing::info!("Forwarding node error to WebSocket client: {error}");
             let msg = serde_json::json!({ "type": "error", "error": error });
-            if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
+            if socket
+                .send(Message::Text(msg.to_string().into()))
+                .await
+                .is_err()
+            {
                 tracing::warn!("Failed to send message to WebSocket client, closing");
                 break;
             }

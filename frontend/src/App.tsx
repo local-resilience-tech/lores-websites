@@ -23,8 +23,12 @@ export function App() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === "error" && msg.error?.RegionNotBound) {
-          setErrorBanner(msg.error.RegionNotBound);
+        if (msg.type === "error") {
+          if (msg.error?.RegionNotBound) {
+            setErrorBanner(msg.error.RegionNotBound);
+          } else if (msg.error?.GrpcUnavailable) {
+            setErrorBanner(msg.error.GrpcUnavailable);
+          }
         }
       } catch {
         // ignore malformed messages

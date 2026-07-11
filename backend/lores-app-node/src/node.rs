@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, watch, Mutex};
 
+use crate::backoff::Backoff;
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
 use crate::outbox::OutboxStore;
@@ -16,12 +17,15 @@ use crate::store::{OperationStore, StoreError};
 pub enum NodeError {
     /// No region has been bound to this app/instance on the remote server.
     RegionNotBound(String),
+    /// The remote gRPC server could not be reached or did not respond.
+    GrpcUnavailable(String),
 }
 
 impl std::fmt::Display for NodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NodeError::RegionNotBound(msg) => write!(f, "{msg}"),
+            NodeError::GrpcUnavailable(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -151,12 +155,15 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     /// Drive the remote subscription in a loop, broadcasting incoming operations
     /// and errors to all subscribers.
     ///
-    /// This method runs until the stream ends or a non-retryable error occurs.
-    /// Call it with `tokio::spawn` from your application's `main`.
+    /// Retries on all transient failures with exponential backoff (1 s → 60 s).
+    /// The backoff resets whenever the error variant changes (e.g. `GrpcUnavailable`
+    /// → `RegionNotBound`). Call it with `tokio::spawn` from your application's `main`.
     pub async fn run(&self)
     where
         Op: for<'de> Deserialize<'de>,
     {
+        let mut backoff = Backoff::new();
+
         loop {
             let stream_result = {
                 let mut t = self.transport.lock().await;
@@ -164,15 +171,35 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
             };
 
             let mut stream = match stream_result {
-                Ok(s) => s,
+                Ok(s) => {
+                    self.error_tx.send_replace(None);
+                    backoff.reset();
+                    s
+                }
                 Err(StoreError::RegionNotBound(msg)) => {
-                    tracing::warn!("Subscribe failed — region not bound: {msg}");
-                    self.error_tx.send_replace(Some(NodeError::RegionNotBound(msg)));
-                    return;
+                    tracing::warn!(
+                        "Subscribe failed — region not bound (retrying in {:?}): {msg}",
+                        backoff.current
+                    );
+                    backoff
+                        .set_error_and_advance(&self.error_tx, NodeError::RegionNotBound(msg))
+                        .await;
+                    continue;
                 }
                 Err(StoreError::Other(msg)) => {
-                    tracing::error!("Subscribe failed: {msg}");
-                    return;
+                    tracing::error!(
+                        "Subscribe failed (retrying in {:?}): {msg}",
+                        backoff.current
+                    );
+                    backoff
+                        .set_error_and_advance(
+                            &self.error_tx,
+                            NodeError::GrpcUnavailable(
+                                "Failed to connect to the gRPC server. Retrying…".to_string(),
+                            ),
+                        )
+                        .await;
+                    continue;
                 }
             };
 
@@ -185,12 +212,29 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
                         Err(e) => tracing::warn!("Failed to deserialize incoming operation: {e}"),
                     },
                     Err(StoreError::Other(msg)) => {
-                        tracing::warn!("Error on subscription stream: {msg}");
+                        tracing::warn!(
+                            "Error on subscription stream (retrying in {:?}): {msg}",
+                            backoff.current
+                        );
+                        backoff
+                            .set_error_and_advance(
+                                &self.error_tx,
+                                NodeError::GrpcUnavailable(
+                                    "Lost connection to the gRPC server. Retrying…".to_string(),
+                                ),
+                            )
+                            .await;
+                        break;
                     }
                     Err(StoreError::RegionNotBound(msg)) => {
-                        tracing::warn!("Region unbound mid-stream: {msg}");
-                        self.error_tx.send_replace(Some(NodeError::RegionNotBound(msg)));
-                        return;
+                        tracing::warn!(
+                            "Region unbound mid-stream (retrying in {:?}): {msg}",
+                            backoff.current
+                        );
+                        backoff
+                            .set_error_and_advance(&self.error_tx, NodeError::RegionNotBound(msg))
+                            .await;
+                        break;
                     }
                 }
             }
