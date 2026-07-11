@@ -16,7 +16,7 @@ gen-api:
     BACKEND_PID=$!
     stop_backend() {
         kill $BACKEND_PID 2>/dev/null
-        pkill -f "target/debug/lores-static-sites" 2>/dev/null || true
+        pkill -f "target/debug/lores-websites" 2>/dev/null || true
         wait $BACKEND_PID 2>/dev/null || true
     }
     trap stop_backend EXIT INT TERM

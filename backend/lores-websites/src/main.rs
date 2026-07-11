@@ -1,47 +1,48 @@
 use axum::routing::get;
-use lores_p2panda_client::PandaClient;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::Mutex;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::static_server::frontend_handler;
 
+mod events;
 mod public_api;
 mod realtime;
 mod static_server;
 
+const PANDA_GRPC_ADDR_ENV: &str = "PANDA_GRPC_ADDR";
 const PANDA_GRPC_ADDR_DEFAULT: &str = "http://127.0.0.1:50051";
-const APP_NAMESPACE: &str = "static-sites:v1";
+
+const APP_ID_ENV: &str = "LORES_APP_ID";
+const APP_ID_DEFAULT: &str = "lores-websites";
+
+const INSTANCE_ID_ENV: &str = "LORES_INSTANCE_ID";
+const INSTANCE_ID_DEFAULT: &str = "default";
 
 #[derive(Clone)]
 pub struct AppState {
-    pub panda: Arc<Mutex<PandaClient>>,
-    pub channels: Arc<Mutex<HashMap<[u8; 32], broadcast::Sender<Vec<u8>>>>>,
-    pub app_namespace: String,
     pub websites: Arc<Mutex<Vec<public_api::websites::Website>>>,
 }
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     #[derive(OpenApi)]
     #[openapi()]
     struct ApiDoc;
 
     let panda_grpc_addr =
-        std::env::var("PANDA_GRPC_ADDR").unwrap_or_else(|_| PANDA_GRPC_ADDR_DEFAULT.to_string());
+        std::env::var(PANDA_GRPC_ADDR_ENV).unwrap_or_else(|_| PANDA_GRPC_ADDR_DEFAULT.to_string());
+    let app_id = std::env::var(APP_ID_ENV).unwrap_or_else(|_| APP_ID_DEFAULT.to_string());
+    let instance_id =
+        std::env::var(INSTANCE_ID_ENV).unwrap_or_else(|_| INSTANCE_ID_DEFAULT.to_string());
 
-    let panda = PandaClient::connect_lazy(panda_grpc_addr)
-        .expect("failed to connect to panda gRPC endpoint");
-    let panda = Arc::new(Mutex::new(panda));
+    let node = lores_websites_node::connect(panda_grpc_addr, &app_id, &instance_id);
 
     let state = AppState {
-        panda,
-        channels: Arc::new(Mutex::new(HashMap::new())),
-        app_namespace: APP_NAMESPACE.to_string(),
         websites: Arc::new(Mutex::new(vec![
             public_api::websites::Website {
                 name: "Example Site".to_string(),
@@ -58,6 +59,11 @@ async fn main() {
         ])),
     };
 
+    events::register_event_handlers(&node, state.clone());
+
+    let run_node = node.clone();
+    tokio::spawn(async move { run_node.run().await });
+
     let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/public_api", public_api::router())
         .split_for_parts();
@@ -72,10 +78,11 @@ async fn main() {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api.clone()))
         .route("/ws/{region_id}", get(realtime::handler))
         .fallback_service(get(frontend_handler))
-        .layer(axum::Extension(state));
+        .layer(axum::Extension(state))
+        .layer(axum::Extension(node));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("backend listening on http://{addr}");
+    tracing::info!("backend listening on http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

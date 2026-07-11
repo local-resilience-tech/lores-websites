@@ -1,0 +1,8 @@
+[package]
+name = "lores-websites-node"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lores-app-node = { path = "../lores-app-node" }
+serde = { workspace = true }
