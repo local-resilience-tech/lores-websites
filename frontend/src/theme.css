@@ -39,7 +39,9 @@
   --white: #fff;
   --off-white: #fff8f5;
   --ink: #2e2e2e;
+}
 
+.wa-light {
   /* Brand = dark pink → light pink scale */
   /* --wa-color-brand-fill-quiet: color-mix(in srgb, var(--color-pink-3) 20%, transparent);
   --wa-color-brand-fill-normal: color-mix(in srgb, var(--color-pink-3) 40%, transparent); */
@@ -64,46 +66,38 @@
   --wa-color-text-link: var(--color-pink-6);
 }
 
-.wa-light {
-  /* Page background */
-  --wa-color-surface-default: var(--color-cyan-3);
-  --wa-color-surface-lowered: var(--color-cyan-4);
-  --wa-color-surface-raised: var(--color-cyan-2);
-  --wa-color-surface-border: var(--color-cyan-6);
-
-  /* Text */
-  --wa-color-text-normal: var(--ink);
-  --wa-color-text-quiet: var(--color-cyan-6);
-  --wa-color-text-link: var(--color-pink-6);
-}
-
 /* Header bar */
-wa-page > [slot="header"] {
+.wa-light wa-page > [slot="header"] {
   background-color: var(--color-pink-6);
   color: var(--white);
   border-bottom: 8px solid var(--color-pink-3);
 }
 
 /* Footer bar */
-wa-page > [slot="footer"] {
+.wa-light wa-page > [slot="footer"] {
   background-color: var(--color-cyan-6);
   color: var(--white);
 }
 
 /* Cards */
-wa-card {
+.wa-light wa-card {
   border-color: var(--color-peach-7);
   border-width: 2px;
   background-color: var(--color-peach-3);
 }
 
-wa-card::part(header) {
+.wa-light wa-card::part(header) {
   background-color: var(--color-peach-4);
   color: var(--ink);
   border-bottom-color: var(--color-peach-5);
 }
 
-wa-card::part(footer) {
+.wa-light wa-card::part(footer) {
   background-color: var(--color-peach-2);
   border-top-color: var(--color-peach-5);
+}
+
+.wa-light wa-callout {
+  background-color: var(--wa-color-fill-normal);
+  border: 2px solid var(--wa-color-border-loud);
 }

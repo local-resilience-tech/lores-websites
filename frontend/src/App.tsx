@@ -7,6 +7,8 @@ import { Layout } from "./components/Layout";
 import { WebsiteForm } from "./components/websites/WebsiteForm";
 import { WebsiteList } from "./components/websites/WebsiteList";
 import { Api, Website } from "./api/Api";
+import styles from "./app.module.css";
+import { Content } from "./components/Content";
 
 const api = new Api();
 
@@ -61,25 +63,27 @@ export function App() {
       }
       footer={<p>Footer content goes here.</p>}
     >
-      {errorBanner && (
-        <wa-callout variant="danger" appearance="filled">
-          <wa-icon slot="icon" name="exclamation-octagon"></wa-icon>
-          {errorBanner}
-          <wa-button slot="footer" variant="neutral" size="small" onClick={() => setErrorBanner(null)}>
-            Dismiss
-          </wa-button>
-        </wa-callout>
-      )}
+      <Content>
+        {errorBanner && (
+          <wa-callout variant="danger" appearance="filled" style={{ marginBottom: "var(--wa-space-m)" }}>
+            <wa-icon slot="icon" name="exclamation-octagon"></wa-icon>
+            {errorBanner}
+            <wa-button slot="footer" variant="neutral" size="small" onClick={() => setErrorBanner(null)}>
+              Dismiss
+            </wa-button>
+          </wa-callout>
+        )}
 
-      <WebsiteList sites={sites} onEdit={setEditIndex} />
+        <WebsiteList sites={sites} onEdit={setEditIndex} />
 
-      <wa-dialog label="Add a New Website" open={showForm || undefined} onwa-after-hide={() => setShowForm(false)}>
-        <WebsiteForm onSubmit={handleAdd} onCancel={() => setShowForm(false)} />
-      </wa-dialog>
+        <wa-dialog label="Add a New Website" open={showForm || undefined} onwa-after-hide={() => setShowForm(false)}>
+          <WebsiteForm onSubmit={handleAdd} onCancel={() => setShowForm(false)} />
+        </wa-dialog>
 
-      <wa-dialog label="Edit Website" open={editIndex !== null || undefined} onwa-after-hide={() => setEditIndex(null)}>
-        {editingSite && <WebsiteForm onSubmit={handleEdit} onCancel={() => setEditIndex(null)} initialValues={editingSite} submitLabel="Save Changes" />}
-      </wa-dialog>
+        <wa-dialog label="Edit Website" open={editIndex !== null || undefined} onwa-after-hide={() => setEditIndex(null)}>
+          {editingSite && <WebsiteForm onSubmit={handleEdit} onCancel={() => setEditIndex(null)} initialValues={editingSite} submitLabel="Save Changes" />}
+        </wa-dialog>
+      </Content>
     </Layout>
   );
 }
