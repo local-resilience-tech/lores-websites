@@ -141,13 +141,13 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
 
     /// Serialize and publish an operation, then broadcast it locally.
     pub async fn publish(&self, operation: &Op) -> Result<(), StoreError> {
-        match serde_json::to_vec(operation) {
-            Ok(payload) => {
-                let mut t = self.transport.lock().await;
-                t.publish(payload, None).await?;
-            }
-            Err(e) => tracing::error!("Failed to serialize operation: {e}"),
-        }
+        let payload = serde_json::to_vec(operation).map_err(|e| {
+            tracing::error!("Failed to serialize operation: {e}");
+            StoreError::Other(format!("Failed to serialize operation: {e}"))
+        })?;
+        let mut t = self.transport.lock().await;
+        t.publish(payload, None).await?;
+        drop(t);
         let _ = self.event_tx.send(operation.clone());
         Ok(())
     }
