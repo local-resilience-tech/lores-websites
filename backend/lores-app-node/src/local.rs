@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use futures::stream;
+use futures::{stream, StreamExt};
 use sqlx::SqlitePool;
 
 use crate::store::{OperationStore, OperationStream, StoreError};
@@ -82,6 +82,25 @@ impl OperationStore for LocalOperationStore {
     {
         Box::pin(async move {
             let s: OperationStream = Box::pin(stream::empty());
+            Ok(s)
+        })
+    }
+
+    fn replay(
+        &mut self,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<OperationStream, StoreError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let rows = sqlx::query_as::<_, (Vec<u8>,)>(
+                "SELECT payload FROM lores_app_operations ORDER BY id ASC",
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StoreError::Other(e.to_string()))?;
+
+            let s: OperationStream = Box::pin(
+                stream::iter(rows).map(|(payload,)| Ok(payload)),
+            );
             Ok(s)
         })
     }

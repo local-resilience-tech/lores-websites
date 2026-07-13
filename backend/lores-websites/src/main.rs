@@ -44,7 +44,7 @@ async fn main() {
 
     let data_dir = std::env::var(DATA_DIR_ENV).unwrap_or_else(|_| DATA_DIR_DEFAULT.to_string());
 
-    let db = lores_websites_node::create_projection_db()
+    let (db, should_replay) = lores_websites_node::create_projection_db()
         .await
         .expect("failed to create projection database");
 
@@ -62,6 +62,10 @@ async fn main() {
     let state = AppState { db };
 
     events::register_event_handlers(&node, state.clone());
+
+    if should_replay {
+        node.replay().await;
+    }
 
     let run_node = node.clone();
     tokio::spawn(async move { run_node.run().await });

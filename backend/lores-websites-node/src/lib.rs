@@ -19,6 +19,7 @@ pub async fn connect(
 }
 
 /// Create the in-memory projection database with the current schema applied.
-pub async fn create_projection_db() -> Result<SqlitePool, sqlx::Error> {
+
+pub async fn create_projection_db() -> Result<(SqlitePool, bool), sqlx::Error> {
     ProjectionDb::in_memory(SCHEMA).await
 }

@@ -64,4 +64,11 @@ impl OperationStore for OutboxStore {
     {
         self.remote.subscribe()
     }
+
+    fn replay(
+        &mut self,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<OperationStream, StoreError>> + Send + '_>>
+    {
+        self.local.replay()
+    }
 }

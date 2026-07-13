@@ -44,4 +44,14 @@ pub(crate) trait OperationStore: Send + Sync + 'static {
     fn subscribe(
         &mut self,
     ) -> Pin<Box<dyn Future<Output = Result<OperationStream, StoreError>> + Send + '_>>;
+
+    /// Replay all operations in insertion order.
+    fn replay(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<OperationStream, StoreError>> + Send + '_>> {
+        Box::pin(async move {
+            let s: OperationStream = Box::pin(futures::stream::empty());
+            Ok(s)
+        })
+    }
 }
