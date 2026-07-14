@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, watch, Mutex};
-
+use tokio::sync::{watch, Mutex};
 use crate::backoff::Backoff;
+use crate::consumer::OperationConsumer;
 use crate::node::{map_store_error, NodeError};
 use crate::store::{OperationStore, StoreError};
 
@@ -12,19 +10,19 @@ use crate::store::{OperationStore, StoreError};
 /// backoff on any failure.
 pub(crate) struct LiveSubscription<Op> {
     operation_store: Arc<Mutex<Box<dyn OperationStore>>>,
-    event_tx: broadcast::Sender<Op>,
+    consumer: OperationConsumer<Op>,
     error_tx: watch::Sender<Option<NodeError>>,
 }
 
-impl<Op: Clone + Serialize + Send + 'static> LiveSubscription<Op> {
+impl<Op: Clone + Send + 'static> LiveSubscription<Op> {
     pub(crate) fn new(
         operation_store: Arc<Mutex<Box<dyn OperationStore>>>,
-        event_tx: broadcast::Sender<Op>,
+        consumer: OperationConsumer<Op>,
         error_tx: watch::Sender<Option<NodeError>>,
     ) -> Self {
         Self {
             operation_store,
-            event_tx,
+            consumer,
             error_tx,
         }
     }
@@ -32,7 +30,7 @@ impl<Op: Clone + Serialize + Send + 'static> LiveSubscription<Op> {
     /// Run the subscription loop forever. Call with `tokio::spawn`.
     pub(crate) async fn run(&self)
     where
-        Op: for<'de> Deserialize<'de>,
+        Op: for<'de> serde::Deserialize<'de>,
     {
         let mut backoff = Backoff::new();
 
@@ -41,15 +39,9 @@ impl<Op: Clone + Serialize + Send + 'static> LiveSubscription<Op> {
                 continue;
             };
 
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(payload) => self.process_stream_item(&payload),
-                    Err(e) => {
-                        self.handle_mid_stream_error(e);
-                        backoff.reset();
-                        break;
-                    }
-                }
+            if let Err(e) = self.consumer.drain_stream(&mut stream).await {
+                self.handle_mid_stream_error(e);
+                backoff.reset();
             }
 
             tracing::info!("Subscription stream ended, reconnecting…");
@@ -86,18 +78,5 @@ impl<Op: Clone + Serialize + Send + 'static> LiveSubscription<Op> {
     fn handle_mid_stream_error(&self, err: StoreError) {
         tracing::warn!("Stream disconnected, reconnecting: {err}");
         self.error_tx.send_replace(Some(map_store_error(err)));
-    }
-
-    /// Deserialize and broadcast a single payload.
-    fn process_stream_item(&self, payload: &[u8])
-    where
-        Op: for<'de> Deserialize<'de>,
-    {
-        match serde_json::from_slice::<Op>(payload) {
-            Ok(op) => {
-                let _ = self.event_tx.send(op);
-            }
-            Err(e) => tracing::warn!("Failed to deserialize operation: {e}"),
-        }
     }
 }

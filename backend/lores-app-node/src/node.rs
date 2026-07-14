@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, watch, Mutex};
 
+use crate::consumer::OperationConsumer;
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
 use crate::outbox::OutboxStore;
@@ -46,7 +46,7 @@ pub struct AppNode<Op> {
     pub app_id: String,
     pub instance_id: String,
     operation_store: Arc<Mutex<Box<dyn OperationStore>>>,
-    event_tx: broadcast::Sender<Op>,
+    consumer: OperationConsumer<Op>,
     error_tx: watch::Sender<Option<NodeError>>,
 }
 
@@ -56,7 +56,7 @@ impl<Op> Clone for AppNode<Op> {
             app_id: self.app_id.clone(),
             instance_id: self.instance_id.clone(),
             operation_store: self.operation_store.clone(),
-            event_tx: self.event_tx.clone(),
+            consumer: self.consumer.clone(),
             error_tx: self.error_tx.clone(),
         }
     }
@@ -70,11 +70,12 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
         let (error_tx, _) = watch::channel(None);
+        let consumer = OperationConsumer::new(event_tx);
         Self {
             app_id: app_id.into(),
             instance_id: instance_id.into(),
             operation_store: Arc::new(Mutex::new(operation_store)),
-            event_tx,
+            consumer,
             error_tx,
         }
     }
@@ -128,7 +129,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
 
     /// Subscribe to operations published through this node (loopback).
     pub fn subscribe(&self) -> broadcast::Receiver<Op> {
-        self.event_tx.subscribe()
+        self.consumer.subscribe()
     }
 
     /// Watch the current node error state.
@@ -150,23 +151,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
             t.replay().await?
         };
 
-        let mut count = 0usize;
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(payload) => match serde_json::from_slice::<Op>(&payload) {
-                    Ok(op) => {
-                        let _ = self.event_tx.send(op);
-                        count += 1;
-                    }
-                    Err(e) => tracing::warn!("Failed to deserialize replayed operation: {e}"),
-                },
-                Err(e) => {
-                    tracing::error!("Replay interrupted by stream error: {e}");
-                    return Err(e);
-                }
-            }
-        }
-
+        let count = self.consumer.drain_stream(&mut stream).await?;
         tracing::info!(count, "replay complete");
         Ok(())
     }
@@ -180,7 +165,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         let mut t = self.operation_store.lock().await;
         t.publish(payload, None).await?;
         drop(t);
-        let _ = self.event_tx.send(operation.clone());
+        self.consumer.send(operation.clone());
         Ok(())
     }
 
@@ -196,7 +181,7 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     {
         LiveSubscription::new(
             self.operation_store.clone(),
-            self.event_tx.clone(),
+            self.consumer.clone(),
             self.error_tx.clone(),
         )
         .run()

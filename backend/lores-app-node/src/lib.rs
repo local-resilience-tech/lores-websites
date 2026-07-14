@@ -1,4 +1,5 @@
 mod backoff;
+mod consumer;
 mod grpc;
 mod local;
 mod node;
