@@ -4,17 +4,66 @@ use axum::{
     Extension,
 };
 use lores_websites_node::LoresWebsiteNode;
+use serde::Serialize;
+use tokio::sync::watch;
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ServerMessage {
+    Status { ready: bool },
+    Error { error: String },
+}
 
 pub async fn handler(
     ws: WebSocketUpgrade,
     Extension(node): Extension<LoresWebsiteNode>,
+    Extension(ready_rx): Extension<watch::Receiver<bool>>,
 ) -> impl IntoResponse {
     tracing::debug!("WebSocket upgrade request received");
-    ws.on_upgrade(|socket| handle_socket(socket, node))
+    ws.on_upgrade(|socket| handle_socket(socket, node, ready_rx))
 }
 
-async fn handle_socket(mut socket: WebSocket, node: LoresWebsiteNode) {
+async fn handle_socket(
+    mut socket: WebSocket,
+    node: LoresWebsiteNode,
+    mut ready_rx: watch::Receiver<bool>,
+) {
     tracing::info!("WebSocket client connected");
+
+    // Send the current ready state immediately on connect.
+    let ready = *ready_rx.borrow_and_update();
+    let msg = ServerMessage::Status { ready };
+    if socket
+        .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+        .await
+        .is_err()
+    {
+        tracing::warn!("Failed to send status to WebSocket client, closing");
+        return;
+    }
+
+    // If replay is in progress, wait for it to finish and notify the client.
+    if !ready {
+        loop {
+            if ready_rx.changed().await.is_err() {
+                tracing::warn!("Ready channel closed before becoming ready");
+                return;
+            }
+            if *ready_rx.borrow() {
+                break;
+            }
+        }
+        let msg = ServerMessage::Status { ready: true };
+        if socket
+            .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+            .await
+            .is_err()
+        {
+            tracing::warn!("Failed to send ready status to WebSocket client, closing");
+            return;
+        }
+    }
+
     let mut error_rx = node.subscribe_errors();
 
     loop {
@@ -25,9 +74,11 @@ async fn handle_socket(mut socket: WebSocket, node: LoresWebsiteNode) {
 
         if let Some(error) = error {
             tracing::info!("Forwarding node error to WebSocket client: {error}");
-            let msg = serde_json::json!({ "type": "error", "error": error });
+            let msg = ServerMessage::Error {
+                error: error.to_string(),
+            };
             if socket
-                .send(Message::Text(msg.to_string().into()))
+                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
                 .await
                 .is_err()
             {

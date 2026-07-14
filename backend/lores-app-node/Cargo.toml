@@ -8,6 +8,7 @@ lores-p2panda-client = "0.3.1"
 futures = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "0.10"
 sqlx = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 tonic = "0.14"

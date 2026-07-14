@@ -1,7 +1,6 @@
 use axum::routing::get;
+use sqlx::SqlitePool;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
@@ -22,9 +21,12 @@ const APP_ID_DEFAULT: &str = "lores-websites";
 const INSTANCE_ID_ENV: &str = "LORES_INSTANCE_ID";
 const INSTANCE_ID_DEFAULT: &str = "default";
 
+const DATA_DIR_ENV: &str = "DATA_DIR";
+const DATA_DIR_DEFAULT: &str = "../data";
+
 #[derive(Clone)]
 pub struct AppState {
-    pub websites: Arc<Mutex<Vec<public_api::websites::Website>>>,
+    pub db: SqlitePool,
 }
 
 #[tokio::main]
@@ -40,29 +42,37 @@ async fn main() {
     let instance_id =
         std::env::var(INSTANCE_ID_ENV).unwrap_or_else(|_| INSTANCE_ID_DEFAULT.to_string());
 
-    let node = lores_websites_node::connect(panda_grpc_addr, &app_id, &instance_id);
+    let data_dir = std::env::var(DATA_DIR_ENV).unwrap_or_else(|_| DATA_DIR_DEFAULT.to_string());
 
-    let state = AppState {
-        websites: Arc::new(Mutex::new(vec![
-            public_api::websites::Website {
-                name: "Example Site".to_string(),
-                description: "A static site hosted on Lores.".to_string(),
-            },
-            public_api::websites::Website {
-                name: "My Blog".to_string(),
-                description: "Personal blog built with a static generator.".to_string(),
-            },
-            public_api::websites::Website {
-                name: "Portfolio".to_string(),
-                description: "Design and development portfolio.".to_string(),
-            },
-        ])),
-    };
+    let (db, should_replay) = lores_websites_node::create_projection_db()
+        .await
+        .expect("failed to create projection database");
+
+    let operations_db_path = format!("{data_dir}/operations.sqlite");
+    let operations_pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect(&format!("sqlite://{operations_db_path}?mode=rwc"))
+        .await
+        .expect("failed to open operations database");
+
+    let node =
+        lores_websites_node::connect(operations_pool, panda_grpc_addr, &app_id, &instance_id)
+            .await
+            .expect("failed to connect node");
+
+    let state = AppState { db };
 
     events::register_event_handlers(&node, state.clone());
 
+    let (ready_tx, ready_rx) = tokio::sync::watch::channel(false);
+
     let run_node = node.clone();
-    tokio::spawn(async move { run_node.run().await });
+    tokio::spawn(async move {
+        if should_replay {
+            run_node.replay().await.expect("replay failed");
+        }
+        let _ = ready_tx.send(true);
+        run_node.run().await;
+    });
 
     let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/public_api", public_api::router())
@@ -79,6 +89,7 @@ async fn main() {
         .route("/ws/{region_id}", get(realtime::handler))
         .fallback_service(get(frontend_handler))
         .layer(axum::Extension(state))
+        .layer(axum::Extension(ready_rx))
         .layer(axum::Extension(node));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

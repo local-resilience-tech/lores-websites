@@ -17,6 +17,7 @@ export function App() {
   const [showForm, setShowForm] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     api.publicApi.websitesIndex().then((response) => setSites(response.data));
@@ -25,7 +26,9 @@ export function App() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === "error") {
+        if (msg.type === "status") {
+          setReady(msg.ready);
+        } else if (msg.type === "error") {
           if (msg.error?.RegionNotBound) {
             setErrorBanner(msg.error.RegionNotBound);
           } else if (msg.error?.GrpcUnavailable) {
@@ -52,6 +55,10 @@ export function App() {
   }
 
   const editingSite = editIndex !== null ? sites[editIndex] : undefined;
+
+  if (!ready) {
+    return <p>Loading...</p>;
+  }
 
   return (
     <Layout

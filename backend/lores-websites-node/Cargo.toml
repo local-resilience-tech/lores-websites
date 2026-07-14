@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 lores-app-node = { path = "../lores-app-node" }
 serde = { workspace = true }
+sqlx = { workspace = true }

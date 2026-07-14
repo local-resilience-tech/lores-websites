@@ -9,16 +9,17 @@ use lores_websites_node::{
     LoresWebsiteNode,
 };
 
-#[derive(Clone, Serialize, ToSchema)]
+#[derive(Clone, Serialize, ToSchema, sqlx::FromRow)]
 pub struct Website {
+    pub id: String,
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
 pub struct CreateWebsiteData {
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
 }
 
 pub fn router() -> OpenApiRouter {
@@ -35,8 +36,16 @@ pub fn router() -> OpenApiRouter {
     )
 )]
 pub async fn websites_index(Extension(state): Extension<AppState>) -> impl IntoResponse {
-    let websites = state.websites.lock().await;
-    Json(websites.clone())
+    match sqlx::query_as::<_, Website>("SELECT id, name, description FROM websites")
+        .fetch_all(&state.db)
+        .await
+    {
+        Ok(websites) => Json(websites).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to query websites: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 #[utoipa::path(
@@ -51,20 +60,24 @@ pub async fn create_website(
     Extension(app_node): Extension<LoresWebsiteNode>,
     Json(payload): Json<CreateWebsiteData>,
 ) -> impl IntoResponse {
-    let website = Website {
-        name: payload.name.clone(),
-        description: payload.description.clone(),
-    };
+    let id = uuid::Uuid::new_v4().to_string();
 
-    // Broadcast a "website created" operation over the lores-p2panda network.
     match app_node
         .publish(&AppOperation::WebsiteCreatedV1(WebsiteCreatedDataV1 {
+            id: id.clone(),
             name: payload.name.clone(),
             description: payload.description.clone(),
         }))
         .await
     {
-        Ok(()) => (StatusCode::CREATED, Json(website)).into_response(),
+        Ok(()) => {
+            let website = Website {
+                id,
+                name: payload.name,
+                description: payload.description,
+            };
+            (StatusCode::CREATED, Json(website)).into_response()
+        }
         Err(e) => {
             tracing::error!("Failed to publish operation: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
