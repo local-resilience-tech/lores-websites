@@ -14,11 +14,6 @@ pub(crate) struct LocalOperationStore {
     pool: SqlitePool,
 }
 
-pub(crate) struct LocalEntry {
-    pub id: i64,
-    pub payload: Vec<u8>,
-}
-
 impl LocalOperationStore {
     pub(crate) async fn new(pool: SqlitePool) -> Result<Self, sqlx::Error> {
         sqlx::query(
@@ -40,16 +35,6 @@ impl LocalOperationStore {
             .execute(&self.pool)
             .await?;
         Ok(result.last_insert_rowid())
-    }
-
-    /// Fetch the oldest entry, if any.
-    pub(crate) async fn next(&self) -> Result<Option<LocalEntry>, sqlx::Error> {
-        let row = sqlx::query_as::<_, (i64, Vec<u8>)>(
-            "SELECT id, payload FROM lores_app_operations ORDER BY id ASC LIMIT 1",
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(row.map(|(id, payload)| LocalEntry { id, payload }))
     }
 
     /// Remove an entry by id after successful delivery.
@@ -98,9 +83,7 @@ impl OperationStore for LocalOperationStore {
             .await
             .map_err(|e| StoreError::Other(e.to_string()))?;
 
-            let s: OperationStream = Box::pin(
-                stream::iter(rows).map(|(payload,)| Ok(payload)),
-            );
+            let s: OperationStream = Box::pin(stream::iter(rows).map(|(payload,)| Ok(payload)));
             Ok(s)
         })
     }

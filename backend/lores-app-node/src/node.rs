@@ -212,28 +212,20 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
                     backoff.reset();
                     s
                 }
-                Err(StoreError::RegionNotBound(msg)) => {
+                Err(err @ StoreError::RegionNotBound(_)) => {
                     tracing::warn!(
-                        "Subscribe failed — region not bound (retrying in {:?}): {msg}",
+                        "Subscribe failed — region not bound (retrying in {:?})",
                         backoff.current
                     );
                     backoff
-                        .set_error_and_advance(&self.error_tx, NodeError::RegionNotBound(msg))
+                        .set_error_and_advance(&self.error_tx, map_store_error(err))
                         .await;
                     continue;
                 }
-                Err(StoreError::Other(msg)) => {
-                    tracing::error!(
-                        "Subscribe failed (retrying in {:?}): {msg}",
-                        backoff.current
-                    );
+                Err(err @ StoreError::Other(_)) => {
+                    tracing::error!("Subscribe failed (retrying in {:?})", backoff.current);
                     backoff
-                        .set_error_and_advance(
-                            &self.error_tx,
-                            NodeError::GrpcUnavailable(
-                                "Failed to connect to the gRPC server. Retrying…".to_string(),
-                            ),
-                        )
+                        .set_error_and_advance(&self.error_tx, map_store_error(err))
                         .await;
                     continue;
                 }
@@ -247,28 +239,23 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
                         }
                         Err(e) => tracing::warn!("Failed to deserialize incoming operation: {e}"),
                     },
-                    Err(StoreError::Other(msg)) => {
+                    Err(err @ StoreError::Other(_)) => {
                         tracing::warn!(
-                            "Error on subscription stream (retrying in {:?}): {msg}",
+                            "Error on subscription stream (retrying in {:?})",
                             backoff.current
                         );
                         backoff
-                            .set_error_and_advance(
-                                &self.error_tx,
-                                NodeError::GrpcUnavailable(
-                                    "Lost connection to the gRPC server. Retrying…".to_string(),
-                                ),
-                            )
+                            .set_error_and_advance(&self.error_tx, map_store_error(err))
                             .await;
                         break;
                     }
-                    Err(StoreError::RegionNotBound(msg)) => {
+                    Err(err @ StoreError::RegionNotBound(_)) => {
                         tracing::warn!(
-                            "Region unbound mid-stream (retrying in {:?}): {msg}",
+                            "Region unbound mid-stream (retrying in {:?})",
                             backoff.current
                         );
                         backoff
-                            .set_error_and_advance(&self.error_tx, NodeError::RegionNotBound(msg))
+                            .set_error_and_advance(&self.error_tx, map_store_error(err))
                             .await;
                         break;
                     }
@@ -277,5 +264,12 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
 
             tracing::info!("Subscription stream ended, reconnecting…");
         }
+    }
+}
+
+fn map_store_error(err: StoreError) -> NodeError {
+    match err {
+        StoreError::RegionNotBound(msg) => NodeError::RegionNotBound(msg),
+        StoreError::Other(msg) => NodeError::GrpcUnavailable(msg),
     }
 }
