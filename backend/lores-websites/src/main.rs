@@ -64,7 +64,7 @@ async fn main() {
     events::register_event_handlers(&node, state.clone());
 
     if should_replay {
-        node.replay().await;
+        node.replay().await.expect("replay failed");
     }
 
     let run_node = node.clone();

@@ -141,21 +141,13 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
 
     /// Replay all locally-stored operations, broadcasting each through the
     /// event channel.
-    pub async fn replay(&self)
+    pub async fn replay(&self) -> Result<(), StoreError>
     where
         Op: for<'de> Deserialize<'de>,
     {
-        let stream_result = {
+        let mut stream = {
             let mut t = self.operation_store.lock().await;
-            t.replay().await
-        };
-
-        let mut stream = match stream_result {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("Replay failed: {e}");
-                return;
-            }
+            t.replay().await?
         };
 
         let mut count = 0usize;
@@ -168,11 +160,15 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
                     }
                     Err(e) => tracing::warn!("Failed to deserialize replayed operation: {e}"),
                 },
-                Err(e) => tracing::warn!("Error reading replayed operation: {e}"),
+                Err(e) => {
+                    tracing::error!("Replay interrupted by stream error: {e}");
+                    return Err(e);
+                }
             }
         }
 
         tracing::info!(count, "replay complete");
+        Ok(())
     }
 
     /// Serialize and publish an operation, then broadcast it locally.

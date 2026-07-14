@@ -42,8 +42,13 @@ impl<Op: Clone + Serialize + Send + 'static> LiveSubscription<Op> {
             };
 
             while let Some(item) = stream.next().await {
-                if !self.process_stream_item(item, &mut backoff).await {
-                    break;
+                match item {
+                    Ok(payload) => self.process_stream_item(&payload),
+                    Err(e) => {
+                        self.handle_mid_stream_error(e);
+                        backoff.reset();
+                        break;
+                    }
                 }
             }
 
@@ -78,56 +83,21 @@ impl<Op: Clone + Serialize + Send + 'static> LiveSubscription<Op> {
         }
     }
 
-    /// Returns `true` to keep iterating, `false` to break and reconnect.
-    async fn process_stream_item(
-        &self,
-        item: Result<Vec<u8>, StoreError>,
-        backoff: &mut Backoff,
-    ) -> bool
-    where
-        Op: for<'de> Deserialize<'de>,
-    {
-        match item {
-            Ok(payload) => {
-                self.broadcast_payload(&payload);
-                true
-            }
-            Err(err @ StoreError::Other(_)) => {
-                tracing::warn!(
-                    "Error on subscription stream (retrying in {:?})",
-                    backoff.current
-                );
-                backoff
-                    .set_error_and_advance(&self.error_tx, map_store_error(err))
-                    .await;
-                false
-            }
-            Err(err @ StoreError::RegionNotBound(_)) => {
-                tracing::warn!(
-                    "Region unbound mid-stream (retrying in {:?})",
-                    backoff.current
-                );
-                backoff
-                    .set_error_and_advance(&self.error_tx, map_store_error(err))
-                    .await;
-                false
-            }
-        }
+    fn handle_mid_stream_error(&self, err: StoreError) {
+        tracing::warn!("Stream disconnected, reconnecting: {err}");
+        self.error_tx.send_replace(Some(map_store_error(err)));
     }
 
-    fn broadcast_payload(&self, payload: &[u8]) -> bool
+    /// Deserialize and broadcast a single payload.
+    fn process_stream_item(&self, payload: &[u8])
     where
         Op: for<'de> Deserialize<'de>,
     {
         match serde_json::from_slice::<Op>(payload) {
             Ok(op) => {
                 let _ = self.event_tx.send(op);
-                true
             }
-            Err(e) => {
-                tracing::warn!("Failed to deserialize operation: {e}");
-                false
-            }
+            Err(e) => tracing::warn!("Failed to deserialize operation: {e}"),
         }
     }
 }
