@@ -192,6 +192,8 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
 pub(crate) fn map_store_error(err: StoreError) -> NodeError {
     match err {
         StoreError::RegionNotBound(msg) => NodeError::RegionNotBound(msg),
-        StoreError::Other(msg) => NodeError::GrpcUnavailable(msg),
+        StoreError::Other(_) => NodeError::GrpcUnavailable(
+            "Could not connect to the LoRes Node for this server".to_string(),
+        ),
     }
 }

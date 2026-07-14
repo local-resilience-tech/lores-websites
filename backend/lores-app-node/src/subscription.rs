@@ -66,7 +66,7 @@ impl<Op: Clone + Send + 'static> LiveSubscription<Op> {
                 None
             }
             Err(err @ StoreError::Other(_)) => {
-                tracing::error!("Subscribe failed (retrying in {:?})", backoff.current);
+                tracing::error!("Subscribe failed: {err} (retrying in {:?})", backoff.current);
                 backoff
                     .set_error_and_advance(&self.error_tx, map_store_error(err))
                     .await;
@@ -76,7 +76,7 @@ impl<Op: Clone + Send + 'static> LiveSubscription<Op> {
     }
 
     fn handle_mid_stream_error(&self, err: StoreError) {
-        tracing::warn!("Stream disconnected, reconnecting: {err}");
+        tracing::warn!("Stream disconnected (reconnecting): {err}");
         self.error_tx.send_replace(Some(map_store_error(err)));
     }
 }
