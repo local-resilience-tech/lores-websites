@@ -63,12 +63,16 @@ async fn main() {
 
     events::register_event_handlers(&node, state.clone());
 
-    if should_replay {
-        node.replay().await.expect("replay failed");
-    }
+    let (ready_tx, ready_rx) = tokio::sync::watch::channel(false);
 
     let run_node = node.clone();
-    tokio::spawn(async move { run_node.run().await });
+    tokio::spawn(async move {
+        if should_replay {
+            run_node.replay().await.expect("replay failed");
+        }
+        let _ = ready_tx.send(true);
+        run_node.run().await;
+    });
 
     let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/public_api", public_api::router())
@@ -85,6 +89,7 @@ async fn main() {
         .route("/ws/{region_id}", get(realtime::handler))
         .fallback_service(get(frontend_handler))
         .layer(axum::Extension(state))
+        .layer(axum::Extension(ready_rx))
         .layer(axum::Extension(node));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
