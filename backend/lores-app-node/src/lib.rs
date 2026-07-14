@@ -5,6 +5,7 @@ mod node;
 mod outbox;
 mod projection;
 mod store;
+mod subscription;
 
 pub use node::{AppNode, NodeError};
 pub use projection::ProjectionDb;

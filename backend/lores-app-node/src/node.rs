@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, watch, Mutex};
 
-use crate::backoff::Backoff;
 use crate::grpc::GrpcOperationStore;
 use crate::local::LocalOperationStore;
 use crate::outbox::OutboxStore;
 use crate::store::{OperationStore, StoreError};
+use crate::subscription::LiveSubscription;
 
 /// Errors emitted by the node that consumers (e.g. a WebSocket handler) may
 /// want to surface directly to users.
@@ -161,11 +161,13 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
         let mut count = 0usize;
         while let Some(item) = stream.next().await {
             match item {
-                Ok(payload) => {
-                    if self.broadcast_payload(&payload) {
+                Ok(payload) => match serde_json::from_slice::<Op>(&payload) {
+                    Ok(op) => {
+                        let _ = self.event_tx.send(op);
                         count += 1;
                     }
-                }
+                    Err(e) => tracing::warn!("Failed to deserialize replayed operation: {e}"),
+                },
                 Err(e) => tracing::warn!("Error reading replayed operation: {e}"),
             }
         }
@@ -196,107 +198,17 @@ impl<Op: Clone + Serialize + Send + 'static> AppNode<Op> {
     where
         Op: for<'de> Deserialize<'de>,
     {
-        let mut backoff = Backoff::new();
-
-        loop {
-            let Some(mut stream) = self.try_subscribe(&mut backoff).await else {
-                continue;
-            };
-
-            while let Some(item) = stream.next().await {
-                if !self.process_stream_item(item, &mut backoff).await {
-                    break;
-                }
-            }
-
-            tracing::info!("Subscription stream ended, reconnecting…");
-        }
-    }
-
-    /// Handle one item from the subscription stream.
-    /// Returns `true` to keep iterating, `false` to break and reconnect.
-    async fn process_stream_item(
-        &self,
-        item: Result<Vec<u8>, StoreError>,
-        backoff: &mut Backoff,
-    ) -> bool
-    where
-        Op: for<'de> Deserialize<'de>,
-    {
-        match item {
-            Ok(payload) => {
-                self.broadcast_payload(&payload);
-                true
-            }
-            Err(err @ StoreError::Other(_)) => {
-                tracing::warn!(
-                    "Error on subscription stream (retrying in {:?})",
-                    backoff.current
-                );
-                backoff
-                    .set_error_and_advance(&self.error_tx, map_store_error(err))
-                    .await;
-                false
-            }
-            Err(err @ StoreError::RegionNotBound(_)) => {
-                tracing::warn!(
-                    "Region unbound mid-stream (retrying in {:?})",
-                    backoff.current
-                );
-                backoff
-                    .set_error_and_advance(&self.error_tx, map_store_error(err))
-                    .await;
-                false
-            }
-        }
-    }
-
-    async fn try_subscribe(&self, backoff: &mut Backoff) -> Option<crate::store::OperationStream> {
-        match self.operation_store.lock().await.subscribe().await {
-            Ok(s) => {
-                self.error_tx.send_replace(None);
-                backoff.reset();
-                Some(s)
-            }
-            Err(err @ StoreError::RegionNotBound(_)) => {
-                tracing::warn!(
-                    "Subscribe failed — region not bound (retrying in {:?})",
-                    backoff.current
-                );
-                backoff
-                    .set_error_and_advance(&self.error_tx, map_store_error(err))
-                    .await;
-                None
-            }
-            Err(err @ StoreError::Other(_)) => {
-                tracing::error!("Subscribe failed (retrying in {:?})", backoff.current);
-                backoff
-                    .set_error_and_advance(&self.error_tx, map_store_error(err))
-                    .await;
-                None
-            }
-        }
+        LiveSubscription::new(
+            self.operation_store.clone(),
+            self.event_tx.clone(),
+            self.error_tx.clone(),
+        )
+        .run()
+        .await;
     }
 }
 
-impl<Op: Clone + Serialize + Send + for<'de> Deserialize<'de> + 'static> AppNode<Op> {
-    /// Deserialize a raw payload and broadcast it on the event channel.
-    /// Returns `true` if the operation was successfully broadcast.
-    fn broadcast_payload(&self, payload: &[u8]) -> bool {
-        match serde_json::from_slice::<Op>(payload) {
-            Ok(op) => {
-                let _ = self.event_tx.send(op);
-                true
-            }
-            Err(e) => {
-                tracing::warn!("Failed to deserialize operation: {e}");
-                false
-            }
-        }
-    }
-}
-
-fn map_store_error(err: StoreError) -> NodeError {
+pub(crate) fn map_store_error(err: StoreError) -> NodeError {
     match err {
         StoreError::RegionNotBound(msg) => NodeError::RegionNotBound(msg),
         StoreError::Other(msg) => NodeError::GrpcUnavailable(msg),
